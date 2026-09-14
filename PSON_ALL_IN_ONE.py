@@ -1,33 +1,25 @@
 #!/usr/bin/env python3
 """
-PSON ALL-IN-ONE v0.6.0
+PSON ALL-IN-ONE v0.6.1
 Python Serial Object Notation - One file to rule them all
 
 Drop this single file anywhere:
   import PSON_ALL_IN_ONE as pson
   pson.dumps({"coords": (1,2), "tags": {"a","b"}}, indent=2)
-  pson.dumpsb(numpy_array)  # binary 5x smaller
-  pson.validate(data, schema)
+  pson.loads('(224, 224)')  # tuple preserved
 
-Features included:
-- Text .pson: tuple (), set {}, list [], dict {k:v}, bytes, datetime, Path, UUID, Decimal, complex, Enum, dataclass
-- Imports: $include, @import("./file.pson").field, @ref("#/path"), @env("VAR", default=...)
-- Schema: pson.schema.string(), int(min,max), float(), enum(), list_of(), set_of(), dict_of(), dataclass as schema
-- Binary .psonb: dumpsb/loadsb, TENSOR support for numpy, streaming dumpb_stream/loadb_stream
-- CLI: python PSON_ALL_IN_ONE.py fmt|check|diff|to-json|to-psonb|from-psonb
+Features: tuple (), set {}, list [], dict, comments, load/dump
+Zero deps.
 
-Version: 0.6.0 (tooling milestone)
-Previous: v0.1 core, v0.2 @register, v0.3 imports, v0.4 schema, v0.5 binary, v0.6 package
-Next: v0.7 perf + security
-
-No dependencies. Optional numpy for tensor support.
+Version: 0.6.1 (LSP + compat fixes)
+Previous: v0.6.0
 """
 import re, os, sys, io, json, base64, pathlib, datetime, uuid, decimal, struct, argparse
 from dataclasses import is_dataclass, asdict, fields, MISSING
 from enum import Enum
 from typing import Union, get_origin, get_args
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 
 # ========= REGISTRY =========
 _registry = {}
