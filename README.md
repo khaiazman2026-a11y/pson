@@ -1,5 +1,9 @@
 # PSON - Python Serial Object Notation
 
+> **JSON = JavaScript Object Notation. Python deserves Python Object Notation. That's PSON.**
+
+PSON is type-safe, env-aware, 5.2x smaller than JSON (binary), and safe unlike Pickle.
+
 [![Spec](https://img.shields.io/badge/spec-v0.8%20frozen-blue)]()
 [![Version](https://img.shields.io/badge/version-v0.9.0--rc-orange)]()
 [![License](https://img.shields.io/badge/license-MIT-green)]()
@@ -37,7 +41,11 @@ pson.dumps({
 | `@import` / `@ref` / `$include` | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Comments | ❌ | ✅ | ❌ | ✅ | ✅ |
 | Binary `.psonb` for tensors | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Streaming large arrays | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Streaming large arrays | ❌ | ❌ | ❌ | ❌ | ✅ 
+- ✅ Preserves Python types: `tuple (224,224)`, `set {a,b}`, `Path`, `datetime`
+- ✅ `@env()`, `@Path()`, `$include`, `@ref()` built-in – no dotenv needed
+- ✅ Safe – no pickle RCE, import jail
+- ✅ PSONB binary 5.2x smaller than JSON|
 
 **Real pain:**
 - JSON: `[224, 224]` - is it list or tuple? You lose info. `tuple([224,224])` != `list` in Python.
@@ -187,11 +195,21 @@ Run yourself: `python PSON_ALL_IN_ONE.py bench`
 - [x] v0.9 RC - Migrations + dogfooding (current)
 - [ ] v1.0 - PyPI `pip install pson` + VSCode extension + stable
 
+### Why not JSON?
+Flask:
+{ image_size: [224,224] } // is it list or tuple? JSON forgets.
+
+PSON:
+{ image_size: (224,224) } // tuple preserved, Jinja gets real tuple
+
+ML:
+{ classes: {cat, dog} } // JSON can't save set – PSON can
+
 ### Why built on Android Termux?
 
 To prove PSON has zero heavy dependencies. If it builds on a phone, it builds anywhere.
 
-Built in Ipoh, Perak, Malaysia.
+Built in Malaysia.
 
 ### Contributing
 
@@ -210,3 +228,7 @@ MIT - see [LICENSE](./LICENSE)
 
 ---
 **Star if JSON ever broke your tuple.**
+
+## Built From Phone
+No laptop, no CS degree. Orchestrated in Termux, coded with Meta AI.
+Flask integration live at `integration/flask/` – localhost:5000 tested in Malaysia.
