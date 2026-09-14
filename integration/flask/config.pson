@@ -1,0 +1,16 @@
+{
+  // Flask + PSON config - type-safe
+  app_name: "myapp",
+  debug: true,
+  image_size: (224, 224),  // tuple preserved, not list
+  features: {auth, api, payments},  // set preserved
+  secret_key: @env("SECRET_KEY", "dev-key"),
+  database_url: @env("DATABASE_URL", "sqlite:///dev.db"),
+  upload_path: @Path("./uploads"),
+  // Include secrets
+  // $include: "./secrets.pson"
+  jinja_globals: {
+    site_name: "PSON Demo"
+  }
+}
+
