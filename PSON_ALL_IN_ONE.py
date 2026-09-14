@@ -72,7 +72,7 @@ def _encode_text(obj, indent, level, sort_keys):
         import numpy as np
         if isinstance(obj, np.ndarray):
             return f"@tensor(shape={obj.shape!r}, dtype={str(obj.dtype)!r})"
-    except: pass
+    except Exception: pass
     if isinstance(obj, set):
         if not obj: return "@set()"
         items=sorted(obj, key=lambda x: repr(x)) if sort_keys else list(obj)
@@ -272,7 +272,7 @@ class PSONDecoder:
         try:
             if '.' in tok or 'e' in tok.lower(): return float(tok)
             return int(tok)
-        except: return tok
+        except Exception: return tok
     def _parse_ident(self):
         s=self.pos
         while self.pos < len(self.text) and (self.text[self.pos].isalnum() or self.text[self.pos] in "_$"): self.pos+=1
@@ -584,7 +584,7 @@ def _enc_bin(obj, f):
             if -2**63 <= obj < 2**63:
                 _w_u8(f, T_INT64); _w_i64(f, obj)
             else: raise OverflowError
-        except:
+        except Exception:
             _w_u8(f, T_INT_BIG)
             s=str(obj).encode(); _w_u32(f, len(s)); f.write(s)
     elif isinstance(obj, float):
@@ -638,7 +638,7 @@ def _enc_bin(obj, f):
                 for d in obj.shape: _w_u32(f, d)
                 raw=obj.tobytes(); _w_u64(f, len(raw)); f.write(raw)
                 return
-        except: pass
+        except Exception: pass
         if is_dataclass(obj):
             _w_u8(f, T_CUSTOM); n=obj.__class__.__name__.encode(); _w_u32(f, len(n)); f.write(n); _enc_bin(asdict(obj), f)
         elif isinstance(obj, Enum):
@@ -692,7 +692,7 @@ def _dec_bin(f):
             try:
                 if isinstance(payload, dict): return ctor(**payload)
                 return ctor(payload)
-            except: return {"__pson_tag__": name, "payload": payload}
+            except Exception: return {"__pson_tag__": name, "payload": payload}
         return {"__pson_tag__": name, "payload": payload}
     raise ValueError(f"Unknown type {t}")
 
@@ -806,7 +806,7 @@ def _cli():
             try:
                 import numpy as np
                 if isinstance(o,np.ndarray): return o.tolist()
-            except: pass
+            except Exception: pass
             return str(o)
         j=json.dumps(obj, default=jd, indent=2)
         if args.output: pathlib.Path(args.output).write_text(j); print(f"Wrote {args.output}")
