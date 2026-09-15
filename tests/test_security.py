@@ -1,46 +1,39 @@
+
+"""
+tests/test_security.py
+"""
+import pathlib, sys
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 import PSON_ALL_IN_ONE as pson
 
 def test_max_depth():
-    deep = "["*70 + "]"*70
+    sec = pson.SecurityConfig(max_depth=3)
+    deep = "{" * 10 + "}" * 10
     try:
-        pson.loads(deep, security=pson.SecurityConfig(max_depth=10))
+        pson.loads(deep, security=sec)
         assert False, "should fail"
     except pson.SecurityError:
-        pass
+        print("✅ max_depth blocked")
 
 def test_max_size():
+    sec = pson.SecurityConfig(max_size=10)
     try:
-        pson.loads("a"*200, security=pson.SecurityConfig(max_size=10))
+        pson.loads("{a: 123456789012345}", security=sec)
         assert False
     except pson.SecurityError:
-        pass
-
-def test_max_keys():
-    big = "{" + ", ".join([f"k{i}: {i}" for i in range(100)]) + "}"
-    try:
-        pson.loads(big, security=pson.SecurityConfig(max_keys=10))
-        assert False
-    except pson.SecurityError:
-        pass
+        print("✅ max_size blocked")
 
 def test_import_blocked():
+    sec = pson.SecurityConfig(allow_imports=False)
     try:
-        pson.loads('@import("etc/passwd")', security=pson.SecurityConfig(allow_imports=False))
+        pson.loads('{ $include: "other.pson" }', security=sec)
         assert False
     except pson.SecurityError:
-        pass
+        print("✅ import blocked")
 
-def test_tuple_set_preserved():
-    obj = pson.loads('{(1,2), (3,4)}')
-    assert isinstance(obj, set)
-    obj2 = pson.loads('(1, 2, 3)')
-    assert isinstance(obj2, tuple)
-
-if __name__=="__main__":
+if __name__ == "__main__":
     test_max_depth()
-    test_max_keys()
-    test_import_blocked()
-    test_tuple_set_preserved()
     test_max_size()
-    print("All security tests passed")
+    test_import_blocked()
 

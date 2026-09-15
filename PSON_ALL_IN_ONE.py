@@ -11,7 +11,7 @@ Drop this single file anywhere:
 Features: tuple (), set {}, list [], dict, comments, load/dump, dumpsb/loadsb, SecurityConfig, Schema, CLI
 Zero deps.
 
-Version: 0.9.0-beta (security enforced)
+Version: 1.0.0-rc1 (core only, ready for v1.0) (security enforced)
 Previous: v0.7.0-alpha
 """
 import re, os, sys, io, json, base64, pathlib, datetime, uuid, decimal, struct, argparse
@@ -19,7 +19,8 @@ from dataclasses import is_dataclass, asdict, fields, MISSING
 from enum import Enum
 from typing import Union, get_origin, get_args
 
-__version__ = "0.9.0-beta"
+__version__ = "1.0.0-rc1"
+__all__ = ["dumps","loads","dump","load","load_file","dumpsb","loadsb","dumpb","loadb","dumpb_stream","loadb_stream","register","get_registry","SecurityConfig","SecurityError","SchemaError","String","Int","Float","Bool","ListOf","SetOf","DictOf"]
 
 # ========= REGISTRY =========
 _registry = {}
