@@ -1,1 +1,0 @@
-{ model: "resnet50", coords: (1,2,3), tags: {python, pson} }

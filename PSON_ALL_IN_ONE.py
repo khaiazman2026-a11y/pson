@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PSON ALL-IN-ONE v0.6.1
+PSON ALL-IN-ONE v0.9.0-beta
 Python Serial Object Notation - One file to rule them all
 
 Drop this single file anywhere:
@@ -8,18 +8,18 @@ Drop this single file anywhere:
   pson.dumps({"coords": (1,2), "tags": {"a","b"}}, indent=2)
   pson.loads('(224, 224)')  # tuple preserved
 
-Features: tuple (), set {}, list [], dict, comments, load/dump
+Features: tuple (), set {}, list [], dict, comments, load/dump, dumpsb/loadsb, SecurityConfig, Schema, CLI
 Zero deps.
 
-Version: 0.6.1 (LSP + compat fixes)
-Previous: v0.6.0
+Version: 0.9.0-beta (security enforced)
+Previous: v0.7.0-alpha
 """
 import re, os, sys, io, json, base64, pathlib, datetime, uuid, decimal, struct, argparse
 from dataclasses import is_dataclass, asdict, fields, MISSING
 from enum import Enum
 from typing import Union, get_origin, get_args
 
-__version__ = "0.6.1"
+__version__ = "0.9.0-beta"
 
 # ========= REGISTRY =========
 _registry = {}
@@ -63,7 +63,8 @@ def _encode_text(obj, indent, level, sort_keys):
     try:
         import numpy as np
         if isinstance(obj, np.ndarray):
-            return f"@tensor(shape={obj.shape!r}, dtype={str(obj.dtype)!r})"
+            # v0.9 binary path will handle buffer, text path keeps meta
+            return f"@tensor(shape={obj.shape!r}, dtype={str(obj.dtype)!r}, nbytes={obj.nbytes})"
     except Exception: pass
     if isinstance(obj, set):
         if not obj: return "@set()"
@@ -130,7 +131,8 @@ class PSONDecoder:
         self.base_path=pathlib.Path(base_path).parent if base_path else pathlib.Path(".")
         self._import_stack=_import_stack or set()
         self._root_obj=None
-        self.security=security
+        self.security=security or DEFAULT_SECURITY
+        self._depth=0
     def parse(self):
         self._skip()
         val=self._parse_value()
@@ -198,6 +200,8 @@ class PSONDecoder:
             return os.environ.get(obj.var, obj.default)
         return obj
     def _do_import(self, rel_path):
+        if self.security:
+            self.security.check_import(rel_path)
         p=(self.base_path / rel_path).resolve()
         if str(p) in self._import_stack: raise ValueError(f"Circular import: {p}")
         if not p.exists(): raise FileNotFoundError(f"Import not found: {p}")
@@ -233,6 +237,9 @@ class PSONDecoder:
     def _parse_value(self):
         self._skip()
         if self.pos>=len(self.text): raise ValueError("EOF")
+        # depth check
+        if self.security and self._depth > self.security.max_depth:
+            raise SecurityError(f"Max depth {self.security.max_depth} exceeded at pos {self.pos}")
         c=self.text[self.pos]
         if self.text[self.pos:self.pos+4]=='null': self.pos+=4; return None
         if self.text[self.pos:self.pos+4]=='true': self.pos+=4; return True
@@ -270,26 +277,30 @@ class PSONDecoder:
         while self.pos < len(self.text) and (self.text[self.pos].isalnum() or self.text[self.pos] in "_$"): self.pos+=1
         return self.text[s:self.pos]
     def _parse_list(self):
-        self.pos+=1; arr=[]; self._skip()
-        if self.pos < len(self.text) and self.text[self.pos]==']': self.pos+=1; return arr
+        self._depth+=1; self.pos+=1; arr=[]; self._skip()
+        if self.pos < len(self.text) and self.text[self.pos]==']': self.pos+=1; self._depth-=1; return arr
         while True:
             self._skip(); arr.append(self._parse_value()); self._skip()
+            if len(arr) > self.security.max_array_len:
+                raise SecurityError(f"Array len {len(arr)} > max {self.security.max_array_len}")
             if self.text[self.pos]==',': self.pos+=1; continue
             if self.text[self.pos]==']': self.pos+=1; break
-        return arr
+        self._depth-=1; return arr
     def _parse_tuple(self):
-        self.pos+=1; items=[]; self._skip()
-        if self.pos < len(self.text) and self.text[self.pos]==')': self.pos+=1; return tuple(items)
+        self._depth+=1; self.pos+=1; items=[]; self._skip()
+        if self.pos < len(self.text) and self.text[self.pos]==')': self.pos+=1; self._depth-=1; return tuple(items)
         while True:
             self._skip()
             if self.pos < len(self.text) and self.text[self.pos]==')': self.pos+=1; break
             items.append(self._parse_value()); self._skip()
+            if len(items) > self.security.max_array_len:
+                raise SecurityError(f"Tuple len {len(items)} > max {self.security.max_array_len}")
             if self.text[self.pos]==',': self.pos+=1; self._skip()
             if self.pos < len(self.text) and self.text[self.pos]==')': self.pos+=1; break
-        return tuple(items)
+        self._depth-=1; return tuple(items)
     def _parse_set_or_dict(self):
-        self.pos+=1; self._skip()
-        if self.pos < len(self.text) and self.text[self.pos]=='}': self.pos+=1; return {}
+        self._depth+=1; self.pos+=1; self._skip()
+        if self.pos < len(self.text) and self.text[self.pos]=='}': self.pos+=1; self._depth-=1; return {}
         first=self._parse_value(); self._skip()
         if self.pos < len(self.text) and self.text[self.pos]==':':
             self.pos+=1; self._skip(); val=self._parse_value()
@@ -297,13 +308,15 @@ class PSONDecoder:
             while True:
                 self._skip()
                 if self.pos>=len(self.text): raise ValueError("unterminated dict")
-                if self.text[self.pos]==',': self.pos+=1; self._skip()
+                if self.text[self.pos]==',' : self.pos+=1; self._skip()
                 if self.pos < len(self.text) and self.text[self.pos]=='}': self.pos+=1; break
                 if self.text[self.pos]=='}': self.pos+=1; break
+                if len(d) > self.security.max_keys:
+                    raise SecurityError(f"Dict keys {len(d)} > max {self.security.max_keys}")
                 k=self._parse_value(); self._skip()
                 if self.text[self.pos]!=':': raise ValueError("expected :")
                 self.pos+=1; self._skip(); v=self._parse_value(); d[k]=v
-            return d
+            self._depth-=1; return d
         else:
             s={first}
             while True:
@@ -311,8 +324,10 @@ class PSONDecoder:
                 if self.pos < len(self.text) and self.text[self.pos]==',': self.pos+=1; self._skip()
                 if self.pos < len(self.text) and self.text[self.pos]=='}': self.pos+=1; break
                 if self.text[self.pos]=='}': self.pos+=1; break
+                if len(s) > self.security.max_keys:
+                    raise SecurityError(f"Set size {len(s)} > max {self.security.max_keys}")
                 s.add(self._parse_value())
-            return s
+            self._depth-=1; return s
     def _parse_tag(self):
         self.pos+=1
         name=self._parse_ident()
@@ -383,26 +398,59 @@ class PSONDecoder:
                 return {"__pson_tag__": name, "args": args, "kwargs": kwargs}
         return {"__pson_tag__": name, "args": args, "kwargs": kwargs}
 
-# ========= SECURITY (v0.6 compat) =========
+# ========= SECURITY (v0.7 enforced) =========
+class SecurityError(Exception):
+    pass
+
 class SecurityConfig:
-    def __init__(self, max_depth=100, allow_imports=None, max_size=None):
-        self.max_depth=max_depth
-        self.allow_imports=allow_imports
-        self.max_size=max_size
+    def __init__(self, max_depth=64, allow_imports=True, max_size=10*1024*1024, max_keys=10000, max_array_len=100000):
+        self.max_depth=max_depth  # max nested { [ (
+        self.allow_imports=allow_imports  # True / False / list of allowed paths
+        self.max_size=max_size  # bytes
+        self.max_keys=max_keys
+        self.max_array_len=max_array_len
+
+    def check_size(self, text_or_bytes):
+        if self.max_size and len(text_or_bytes) > self.max_size:
+            raise SecurityError(f"PSON size {len(text_or_bytes)} exceeds max_size {self.max_size}")
+
+    def check_import(self, rel_path):
+        if self.allow_imports is False:
+            raise SecurityError(f"Imports disabled, blocked: {rel_path}")
+        if isinstance(self.allow_imports, (list, set, tuple)):
+            # allow if rel_path startswith any allowed
+            if not any(str(rel_path).startswith(str(a)) for a in self.allow_imports):
+                raise SecurityError(f"Import not allowed: {rel_path} not in {self.allow_imports}")
+
+DEFAULT_SECURITY = SecurityConfig()
 
 def loads(text, custom_types=None, base_path=None, security=None):
-    # security param kept for README compat – currently validated via max_depth check in decoder if needed
-    return PSONDecoder(text, custom_types=custom_types, base_path=base_path or ".", security=security).parse()
+    sec = security or DEFAULT_SECURITY
+    if sec:
+        sec.check_size(text)
+    return PSONDecoder(text, custom_types=custom_types, base_path=base_path or ".", security=sec).parse()
 
 def load(fp, custom_types=None, security=None):
     base=getattr(fp, 'name', '.')
-    return loads(fp.read(), custom_types=custom_types, base_path=base, security=security)
+    txt=fp.read()
+    sec = security or DEFAULT_SECURITY
+    if sec:
+        sec.check_size(txt)
+    return loads(txt, custom_types=custom_types, base_path=base, security=sec)
 
 def load_file(path, custom_types=None, security=None):
     p=pathlib.Path(path)
     if p.suffix=='.psonb':
-        return loadsb(p.read_bytes(), custom_types=custom_types)
-    return loads(p.read_text(encoding='utf-8'), custom_types=custom_types, base_path=str(p), security=security)
+        data=p.read_bytes()
+        sec = security or DEFAULT_SECURITY
+        if sec:
+            sec.check_size(data)
+        return loadsb(data, custom_types=custom_types, security=sec)
+    txt=p.read_text(encoding='utf-8')
+    sec = security or DEFAULT_SECURITY
+    if sec:
+        sec.check_size(txt)
+    return loads(txt, custom_types=custom_types, base_path=str(p), security=sec)
 
 def dump(obj, fp, **kw):
     fp.write(dumps(obj, **kw))
@@ -691,7 +739,10 @@ def _dec_bin(f):
 def dumpsb(obj) -> bytes:
     buf=io.BytesIO(); buf.write(MAGIC); buf.write(struct.pack('>B', VER)); _enc_bin(obj, buf); return buf.getvalue()
 
-def loadsb(data: bytes, custom_types=None):
+def loadsb(data: bytes, custom_types=None, security=None):
+    sec = security or DEFAULT_SECURITY
+    if sec:
+        sec.check_size(data)
     if custom_types: _registry.update(custom_types)
     buf=io.BytesIO(data)
     magic=buf.read(5)
@@ -701,7 +752,7 @@ def loadsb(data: bytes, custom_types=None):
     return _dec_bin(buf)
 
 def dumpb(obj, fp): fp.write(dumpsb(obj))
-def loadb(fp, custom_types=None):
+def loadb(fp, custom_types=None, security=None):
     data=fp.read() if hasattr(fp,'read') else fp
     return loadsb(data, custom_types=custom_types)
 
@@ -826,3 +877,4 @@ def _cli():
 
 if __name__=="__main__":
     _cli()
+

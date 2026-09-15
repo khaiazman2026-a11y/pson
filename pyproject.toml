@@ -1,6 +1,32 @@
 [build-system]
-requires=["setuptools>=61.0"]
-build-backend="setuptools.build_meta"
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name="pson"
-version="0.9.0-rc"
+name = "PSON-ALL-IN-ONE"
+version = "0.9.0b0"
+description = "Python Serial Object Notation - tuple/set preserved, binary, zero-deps"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name="khaiazman2026-a11y", email="khaiazman2026@github"}]
+keywords = ["pson", "serialization", "tuple", "set", "config", "llm"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Software Development :: Libraries"
+]
+requires-python = ">=3.8"
+dependencies = []
+
+[project.optional-dependencies]
+flask = ["flask"]
+fastapi = ["fastapi"]
+numpy = ["numpy"]
+dev = ["pytest", "flask", "fastapi", "numpy"]
+
+[project.scripts]
+pson = "PSON_ALL_IN_ONE:_cli"
+
+[project.urls]
+Homepage = "https://github.com/khaiazman2026-a11y/pson"
+
